@@ -15,8 +15,11 @@ if str(LANGGRAPH_DIR) not in sys.path:
     sys.path.insert(0, str(LANGGRAPH_DIR))
 
 from arena_clients.proxy_headers import build_proxy_headers  # noqa: E402
+import agent as langgraph_agent  # noqa: E402
+from base_strategy import BaseStrategy, ChallengeContext  # noqa: E402
 from agent import (  # noqa: E402
     _build_mcp_sse_connection,
+    _pick_react_model,
     _derive_answer_from_challenge,
     _derive_answer_from_evidence,
     _extract_ordered_answer_from_rules,
@@ -164,6 +167,36 @@ class LangGraphProxyHeaderTests(unittest.TestCase):
             captured_headers,
             {"X-Agent-ID": "team-beacon", "X-Round-ID": "round-123"},
         )
+
+
+class ReactModelForImageTests(unittest.TestCase):
+    """The ReAct agent must call tools, which image models cannot do."""
+
+    MODELS = ["gemini-3.1-flash-lite-image", "gemini-3.1-flash-image", "nemotron-3.5-lightning", "qwen3.7-flash"]
+
+    class _ImageFirst(BaseStrategy):
+        def rank_models(self, ctx, available_models):
+            images = [m for m in available_models if "image" in m]
+            others = [m for m in available_models if "image" not in m]
+            return images + others if ctx.challenge_type.startswith("image") else others + images
+
+    def _pick(self, modality: str, challenge_type: str, strategy_model: str) -> str:
+        ctx = ChallengeContext(challenge_type=challenge_type, image_url="https://x/in.jpg")
+        with mock.patch.object(langgraph_agent, "STRATEGY", self._ImageFirst()):
+            return _pick_react_model(ctx, self.MODELS, modality, strategy_model)
+
+    def test_image_challenge_drives_react_with_a_non_image_model(self) -> None:
+        picked = self._pick("image", "image-generate", "gemini-3.1-flash-lite-image")
+        self.assertEqual(picked, "nemotron-3.5-lightning")
+
+    def test_text_challenge_keeps_the_strategy_model(self) -> None:
+        self.assertEqual(self._pick("text", "logic-puzzle", "qwen3.7-flash"), "qwen3.7-flash")
+
+    def test_roster_with_only_image_models_falls_back_to_the_strategy_model(self) -> None:
+        ctx = ChallengeContext(challenge_type="image-edit")
+        with mock.patch.object(langgraph_agent, "STRATEGY", self._ImageFirst()):
+            picked = _pick_react_model(ctx, ["gemini-3.1-flash-image"], "image", "gemini-3.1-flash-image")
+        self.assertEqual(picked, "gemini-3.1-flash-image")
 
 
 if __name__ == "__main__":

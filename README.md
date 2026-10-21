@@ -47,7 +47,8 @@ python3.12 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.txt
 cp .env.example .env
-# edit .env with the organizer-provided ARENA_SERVER and ARENA_API_KEY
+# edit .env: the organizer-provided ARENA_SERVER and ARENA_API_KEY, and
+# AGENT_ID, a unique name for your team (e.g. AGENT_ID=team-nemo)
 
 # readiness preflight (API, MCP, proxy, attributed inference)
 python -m arena_clients.doctor

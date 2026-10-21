@@ -56,6 +56,10 @@ def submission_summary_lines(result: Any) -> list[str]:
         note = missing_tools_note(result)
         if note:
             lines.append(note)
+        judge_error = score.get("judge_error") if isinstance(score, dict) else None
+        if judge_error:
+            # Quality is 0 because the judge failed, not because the image was poor.
+            lines.append(f"Judge error: {judge_error} (quality 0 until the image can be judged)")
         return lines
     except Exception as exc:
         return [f"Submission result unavailable ({type(exc).__name__})"]

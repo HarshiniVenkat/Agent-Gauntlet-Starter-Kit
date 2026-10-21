@@ -135,6 +135,14 @@ Use the returned score and telemetry to tune prompts, model ranking, tool order,
 and timeout behavior in `my_strategy.py`. Discover tools and models at runtime;
 the available roster can differ between Practice and a live event.
 
+### Use a unique AGENT_ID
+
+Every team uses the same Practice key, so Practice tells teams apart only by
+`agent_id`. If two runs use the same id, the later registration replaces the
+earlier run, including its leaderboard row. Set `AGENT_ID` in `.env` to a name
+only your team uses; the examples refuse to start on Practice with the kit's
+default id.
+
 ### Final submission retries
 
 The first final answer recorded for an agent is official. If a submit response

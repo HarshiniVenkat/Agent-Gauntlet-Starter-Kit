@@ -22,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 
 load_dotenv(REPO_ROOT / ".env")
 
+from arena_clients.config import agent_id_problem
 from arena_clients import (
     ArenaAPIError,
     ArenaConnectionError,
@@ -416,7 +417,9 @@ _JUDGE_SYSTEM = (
 )
 
 
-def _llm_judge_extract(raw_output: str, judge_model: str) -> str | None:
+def _llm_judge_extract(
+    raw_output: str, judge_model: str, max_tokens: int = 8192
+) -> str | None:
     """Call a lightweight LLM to extract the answer from raw reasoning output.
 
     Returns the extracted answer string, or *None* if the judge could not
@@ -448,7 +451,7 @@ def _llm_judge_extract(raw_output: str, judge_model: str) -> str | None:
             },
         ],
         "temperature": 0.0,
-        "max_tokens": 64,
+        "max_tokens": max_tokens,
     }
 
     headers = {
@@ -522,9 +525,9 @@ def _llm_judge_extract(raw_output: str, judge_model: str) -> str | None:
     return None
 
 
-async def _async_judge_extract(raw_output: str, judge_model: str) -> str | None:
+async def _async_judge_extract(raw_output: str, judge_model: str, max_tokens: int = 8192) -> str | None:
     """Async wrapper around the synchronous judge extraction call."""
-    return await asyncio.to_thread(_llm_judge_extract, raw_output, judge_model)
+    return await asyncio.to_thread(_llm_judge_extract, raw_output, judge_model, max_tokens)
 
 
 def _extract_answer(
@@ -859,6 +862,7 @@ def _repair_final_answer_with_llm(
     current_answer: str | None,
     reasoning: str | None,
     model_name: str,
+    max_tokens: int = 8192,
 ) -> tuple[str | None, dict[str, Any] | None, int]:
     clues_block = "\n".join(f"- {clue}" for clue in clues if clue.strip()) or "- (No clues provided.)"
     prompt = (
@@ -879,7 +883,7 @@ def _repair_final_answer_with_llm(
         ),
         model_name=model_name,
         temperature=0.0,
-        max_tokens=192,
+        max_tokens=max_tokens,
     )
     if not message:
         return None, usage, ttft_ms
@@ -997,6 +1001,7 @@ def _plan_image_tool_call(
     reference_notes: str,
     has_input_image: bool,
     available_tools: list[str],
+    max_tokens: int = 8192,
 ) -> tuple[dict[str, str], dict[str, Any] | None, int]:
     default_plan = _default_image_tool_plan(
         available_tools=available_tools,
@@ -1030,7 +1035,7 @@ def _plan_image_tool_call(
         system_prompt=_IMAGE_TOOL_PLAN_SYSTEM,
         model_name=model_name,
         temperature=0.0,
-        max_tokens=220,
+        max_tokens=max_tokens,
     )
     if not message:
         return default_plan, usage, ttft_ms
@@ -1166,6 +1171,7 @@ def try_extract_search_answer_with_llm(
     rules: str | None,
     search_result: Any,
     model_name: str,
+    max_tokens: int = 8192,
 ) -> tuple[str | None, dict[str, Any] | None, int]:
     result_text = _format_search_results_for_llm(search_result)
     rules_text = rules or "Answer with the final result only."
@@ -1191,7 +1197,7 @@ def try_extract_search_answer_with_llm(
         ),
         model_name=model_name,
         temperature=0.0,
-        max_tokens=128,
+        max_tokens=max_tokens,
     )
     if not message:
         return None, usage, ttft_ms
@@ -1693,6 +1699,10 @@ async def run() -> None:
     if not agent_name:
         agent_name = agent_id
     os.environ["AGENT_ID"] = agent_id
+    # Practice is shared: a default id lets another team's run replace yours.
+    id_problem = agent_id_problem(os.environ["AGENT_ID"])
+    if id_problem:
+        raise SystemExit(f"❌ {id_problem}")
     os.environ["AGENT_NAME"] = agent_name
 
     api_base = get_api_base()
@@ -1935,6 +1945,7 @@ async def run() -> None:
             strategy_image_prompt = STRATEGY.build_image_prompt(image_tool_ctx).strip()
             plan, usage, ttft_ms = _plan_image_tool_call(
                 model_name=model_name,
+                max_tokens=text_max_tokens,
                 challenge_type=image_challenge.challenge_type,
                 challenge_description=image_challenge.description,
                 challenge_prompt=challenge_prompt,
@@ -2255,6 +2266,7 @@ async def run() -> None:
                 rules=rules,
                 search_result=search_result,
                 model_name=model_name,
+                max_tokens=text_max_tokens,
             )
             if _is_invalid_meta_answer_candidate(answer):
                 answer = None
@@ -2298,6 +2310,7 @@ async def run() -> None:
                     current_answer=answer,
                     reasoning=_format_search_results_for_llm(search_result),
                     model_name=model_name,
+                    max_tokens=text_max_tokens,
                 )
                 if repaired and _is_valid_submission_candidate(repaired, rules):
                     answer = repaired
@@ -2416,7 +2429,7 @@ async def run() -> None:
             print("[agent] calling LLM judge for answer extraction", flush=True)
             raw_text = reasoning
             judge_model = (os.getenv("JUDGE_MODEL") or model_name).strip()
-            answer = await _async_judge_extract(raw_text, judge_model)
+            answer = await _async_judge_extract(raw_text, judge_model, text_max_tokens)
             if _is_invalid_meta_answer_candidate(answer):
                 answer = None
             if answer:
@@ -2466,6 +2479,7 @@ async def run() -> None:
                 current_answer=answer,
                 reasoning=reasoning,
                 model_name=model_name,
+                max_tokens=text_max_tokens,
             )
             if repaired and _is_valid_submission_candidate(repaired, challenge.rules or ""):
                 answer = repaired

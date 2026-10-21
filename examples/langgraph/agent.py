@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import quote
@@ -31,6 +32,7 @@ if str(REPO_ROOT) not in sys.path:
 
 load_dotenv(REPO_ROOT / ".env")
 
+from arena_clients.config import agent_id_problem
 from arena_clients import (
     ArenaAPIError,
     ArenaConnectionError,
@@ -143,6 +145,33 @@ def _fetch_proxy_usage(
 
     aggregate_url = f"{llm_host.rstrip('/')}/usage/{encoded_agent_id}"
     return _read_usage(aggregate_url)
+
+
+def _pick_react_model(
+    selection_ctx: ChallengeContext,
+    available_models: list[str],
+    modality: str,
+    strategy_model: str,
+) -> str:
+    """The model that drives the ReAct agent.
+
+    It must call tools. For an image challenge the strategy ranks image models
+    first, and those cannot call tools (the proxy rejects the request), so the
+    agent uses the strategy's best non-image model; the image model still
+    goes to the image tools.
+    """
+    if modality != "image":
+        return strategy_model
+    planner_ctx = replace(selection_ctx, challenge_type="tool-orchestration", image_url=None)
+    ranked = [
+        name
+        for name in STRATEGY.rank_models(planner_ctx, available_models)
+        if "image" not in name.casefold()
+    ]
+    picked = STRATEGY.pick_model("solve", ranked, planner_ctx) if ranked else ""
+    if picked and "image" not in picked.casefold():
+        return picked
+    return ranked[0] if ranked else strategy_model
 
 
 def _build_context(
@@ -873,6 +902,7 @@ def _derive_answer_from_evidence(
     evidence_lines: list[str],
     agent_id: str,
     usage_scope: str | None = None,
+    max_tokens: int = DEFAULT_TEXT_MAX_TOKENS,
 ) -> str:
     if not evidence_lines:
         return ""
@@ -912,7 +942,7 @@ def _derive_answer_from_evidence(
                 },
             ],
             temperature=0.0,
-            max_tokens=256,
+            max_tokens=max_tokens,
         )
     except Exception:
         return ""
@@ -931,6 +961,7 @@ def _derive_answer_from_challenge(
     evidence_lines: list[str] | None = None,
     agent_id: str,
     usage_scope: str | None = None,
+    max_tokens: int = DEFAULT_TEXT_MAX_TOKENS,
 ) -> str:
     try:
         from openai import OpenAI
@@ -975,7 +1006,7 @@ def _derive_answer_from_challenge(
                 },
             ],
             temperature=0.0,
-            max_tokens=256,
+            max_tokens=max_tokens,
         )
     except Exception:
         return ""
@@ -1086,6 +1117,10 @@ async def main() -> int:
         or DEFAULT_AGENT_NAME
     )
     os.environ["AGENT_ID"] = str(agent_id).strip() or DEFAULT_AGENT_ID
+    # Practice is shared: a default id lets another team's run replace yours.
+    id_problem = agent_id_problem(os.environ["AGENT_ID"])
+    if id_problem:
+        raise SystemExit(f"❌ {id_problem}")
     os.environ["AGENT_NAME"] = str(agent_name).strip() or DEFAULT_AGENT_NAME
 
     ensure_connected()
@@ -1195,11 +1230,17 @@ async def main() -> int:
         available_models,
         source="langgraph agent",
     )
+    image_model_name = model_name
+    model_name = require_explicit_model(
+        _pick_react_model(selection_ctx, available_models, modality, model_name),
+        available_models,
+        source="langgraph agent",
+    )
     image_tool_proxy_args = {
         tool_name: build_image_tool_arguments(
             tool_defs,
             tool_name,
-            selected_model=model_name,
+            selected_model=image_model_name,
             llm_api_key=llm_api_key,
             arena_api_key=api_key,
         )
@@ -1218,6 +1259,8 @@ async def main() -> int:
         _coerce_positive_int(str(llm_params.get("max_tokens", text_max_tokens)), text_max_tokens),
     )
     print(f"   Selected model: {model_name}")
+    if image_model_name != model_name:
+        print(f"   Image tool model: {image_model_name}")
     try:
         http_client.broadcast_thought(agent_id, f"🤖 Selected model: {model_name}")
     except Exception:
@@ -1553,7 +1596,7 @@ async def main() -> int:
             print("   Submitting ReAct image candidate.")
             try:
                 async with McpArenaClient(mcp_url) as submit_mcp:
-                    effective_image_model_name = react_image_model_name or model_name
+                    effective_image_model_name = react_image_model_name or image_model_name
                     submit_result = await submit_mcp.submit_image(
                         agent_id=agent_id,
                         image_uri=react_image_uri,
@@ -1682,7 +1725,7 @@ async def main() -> int:
                         image_uri = image_challenge.input_image_uri
                     if not image_uri:
                         image_uri = BLANK_PNG_DATA_URI
-                    effective_image_model_name = image_tool_model_name or model_name
+                    effective_image_model_name = image_tool_model_name or image_model_name
 
                     submit_result = await fallback_mcp.submit_image(
                         agent_id=agent_id,
@@ -1729,12 +1772,13 @@ async def main() -> int:
         raw_evidence_answer = _derive_answer_from_evidence(
             llm_host=llm_host,
             llm_api_key=llm_api_key,
-            model_name=model_name,
+            model_name=active_model_name,
             challenge_description=str(challenge.description or ""),
             challenge_rules=str(challenge.rules or ""),
             evidence_lines=required_tool_evidence_lines,
             agent_id=agent_id,
             usage_scope=usage_scope,
+            max_tokens=text_max_tokens,
         )
         evidence_answer = extract_answer(raw_evidence_answer, challenge.rules or "")
         if evidence_answer:
@@ -1774,7 +1818,7 @@ async def main() -> int:
                 default_headers=build_proxy_headers(agent_id, usage_scope),
             )
             strict_response = client.chat.completions.create(
-                model="nemotron-3-nano-30b",
+                model=active_model_name,
                 messages=[
                     {"role": "system", "content": strict_system_msg},
                     {
@@ -1786,7 +1830,7 @@ async def main() -> int:
                         ),
                     },
                 ],
-                max_tokens=256,
+                max_tokens=text_max_tokens,
                 temperature=0.0,
             )
             raw_retry = strict_response.choices[0].message.content or ""
@@ -1803,13 +1847,14 @@ async def main() -> int:
         raw_direct_answer = _derive_answer_from_challenge(
             llm_host=llm_host,
             llm_api_key=llm_api_key,
-            model_name=model_name,
+            model_name=active_model_name,
             challenge_description=str(challenge.description or ""),
             challenge_rules=str(challenge.rules or ""),
             clues=clue_texts,
             evidence_lines=required_tool_evidence_lines,
             agent_id=agent_id,
             usage_scope=usage_scope,
+            max_tokens=text_max_tokens,
         )
         answer = extract_answer(raw_direct_answer, challenge.rules or "")
         if _is_invalid_answer_candidate(answer):
@@ -1855,7 +1900,7 @@ async def main() -> int:
                     default_headers=build_proxy_headers(agent_id, usage_scope),
                 )
                 repair_response = repair_client.chat.completions.create(
-                    model="nemotron-3-nano-30b",
+                    model=active_model_name,
                     messages=[
                         {"role": "system", "content": repair_system_msg},
                         {
@@ -1868,7 +1913,7 @@ async def main() -> int:
                             ),
                         },
                     ],
-                    max_tokens=256,
+                    max_tokens=text_max_tokens,
                     temperature=0.0,
                 )
                 repaired_raw = repair_response.choices[0].message.content or ""

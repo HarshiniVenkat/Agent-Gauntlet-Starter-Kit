@@ -55,7 +55,7 @@ The starter kit derives the REST API, MCP, and proxy URLs from `ARENA_SERVER`.
 
 Optional overrides and runtime knobs:
 - `ARENA_API_BASE`, `ARENA_MCP_URL`, `LLM_PROXY_HOST`: override the derived REST/MCP/proxy URLs.
-- `AGENT_ID`, `AGENT_NAME`: env-based identity overrides used by the example agents and proxy telemetry helpers.
+- `AGENT_ID`, `AGENT_NAME`: your team's identity, used by the example agents and proxy telemetry helpers. Set a unique `AGENT_ID`: on a shared server such as Practice the examples refuse the kit's default ids, since another team's run with the same id would replace yours.
 - `ARENA_USAGE_SCOPE`: manual proxy token-attribution scope when you are not launched by Agent Gauntlet and need to set `X-Round-ID` yourself.
 
 ## Agent Development Conventions

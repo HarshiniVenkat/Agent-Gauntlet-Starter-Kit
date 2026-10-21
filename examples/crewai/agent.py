@@ -34,6 +34,7 @@ if str(REPO_ROOT) not in sys.path:
 
 load_dotenv(REPO_ROOT / ".env")
 
+from arena_clients.config import agent_id_problem
 from arena_clients import (
     HttpArenaClient,
     McpArenaClient,
@@ -275,6 +276,7 @@ def _repair_text_answer(
     repair_model: str,
     agent_id: str | None = None,
     usage_scope: str | None = None,
+    max_tokens: int = 3072,
 ) -> str:
     """Best-effort formatter repair for empty/malformed CrewAI text output."""
     if not raw_content.strip():
@@ -312,7 +314,7 @@ def _repair_text_answer(
                 },
             ],
             temperature=0.0,
-            max_tokens=512,
+            max_tokens=max_tokens,
         )
     except Exception:
         return ""
@@ -331,6 +333,7 @@ def _derive_answer_from_evidence(
     evidence_lines: list[str],
     agent_id: str | None = None,
     usage_scope: str | None = None,
+    max_tokens: int = 3072,
 ) -> str:
     if not evidence_lines:
         return ""
@@ -370,7 +373,7 @@ def _derive_answer_from_evidence(
                 },
             ],
             temperature=0.0,
-            max_tokens=768,
+            max_tokens=max_tokens,
         )
     except Exception:
         return ""
@@ -393,6 +396,7 @@ def _direct_text_fallback_answer(
     clues: list[str],
     agent_id: str | None = None,
     usage_scope: str | None = None,
+    max_tokens: int = 3072,
 ) -> str:
     try:
         from openai import OpenAI
@@ -428,7 +432,7 @@ def _direct_text_fallback_answer(
                 },
             ],
             temperature=0.0,
-            max_tokens=768,
+            max_tokens=max_tokens,
         )
     except Exception:
         return ""
@@ -1193,6 +1197,10 @@ async def main() -> int:
         or DEFAULT_AGENT_NAME
     )
     os.environ["AGENT_ID"] = agent_id
+    # Practice is shared: a default id lets another team's run replace yours.
+    id_problem = agent_id_problem(os.environ["AGENT_ID"])
+    if id_problem:
+        raise SystemExit(f"❌ {id_problem}")
     os.environ["AGENT_NAME"] = agent_name
 
     print(f"  {agent_name} starting...")
@@ -1494,6 +1502,7 @@ async def main() -> int:
                     evidence_lines=required_tool_evidence_lines,
                     agent_id=agent_id,
                     usage_scope=usage_scope,
+                    max_tokens=llm_max_tokens,
                 )
             if _is_invalid_answer_candidate(answer):
                 answer = ""
@@ -1508,6 +1517,7 @@ async def main() -> int:
                     clues=clue_texts,
                     agent_id=agent_id,
                     usage_scope=usage_scope,
+                    max_tokens=llm_max_tokens,
                 )
             if _is_invalid_answer_candidate(answer):
                 answer = ""
@@ -1586,6 +1596,7 @@ async def main() -> int:
                 evidence_lines=required_tool_evidence_lines,
                 agent_id=agent_id,
                 usage_scope=usage_scope,
+                max_tokens=llm_max_tokens,
             )
         if _is_invalid_answer_candidate(answer):
             answer = ""
@@ -1601,6 +1612,7 @@ async def main() -> int:
                 repair_model=repair_model,
                 agent_id=agent_id,
                 usage_scope=usage_scope,
+                max_tokens=llm_max_tokens,
             )
         if _is_invalid_answer_candidate(answer):
             answer = ""
@@ -1615,6 +1627,7 @@ async def main() -> int:
                 clues=clue_texts,
                 agent_id=agent_id,
                 usage_scope=usage_scope,
+                max_tokens=llm_max_tokens,
             )
         if _is_invalid_answer_candidate(answer):
             answer = ""

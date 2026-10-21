@@ -20,7 +20,7 @@ import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -162,6 +162,30 @@ def build_image_tool_arguments(
     if proxy_api_key:
         arguments["proxy_api_key"] = proxy_api_key
     return arguments
+
+
+# The first request from a new process also sets up the TLS connection, which
+# took 1.5s against Practice; a 1.5s limit then fell back to a wrong guess.
+SESSION_LOOKUP_TIMEOUT_S = 10.0
+SESSION_LOOKUP_ATTEMPTS = 2
+COMPETITION_LOOKUP_TIMEOUT_S = 5.0
+
+
+def _get_json(request: Request, *, timeout: float, attempts: int = 1) -> dict[str, Any] | None:
+    """GET ``request`` as JSON; retry network errors, never an HTTP error reply."""
+    for attempt in range(attempts):
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            return payload if isinstance(payload, dict) else None
+        except HTTPError:
+            return None
+        except (URLError, TimeoutError, OSError):
+            if attempt + 1 >= attempts:
+                return None
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 class McpArenaClient:
@@ -320,14 +344,14 @@ class McpArenaClient:
                 },
                 method="GET",
             )
-            try:
-                with urlopen(request, timeout=1.5) as response:
-                    payload = json.loads(response.read().decode("utf-8"))
-                session_type = str(payload.get("challenge_type") or "").lower()
-                if session_type in {"text", "image"}:
-                    return session_type
-            except (json.JSONDecodeError, URLError, TimeoutError):
-                pass
+            payload = _get_json(
+                request,
+                timeout=SESSION_LOOKUP_TIMEOUT_S,
+                attempts=SESSION_LOOKUP_ATTEMPTS,
+            )
+            session_type = str((payload or {}).get("challenge_type") or "").lower()
+            if session_type in {"text", "image"}:
+                return session_type
 
         if api_base:
             request = Request(
@@ -335,16 +359,12 @@ class McpArenaClient:
                 headers={"Accept": "application/json"},
                 method="GET",
             )
-            try:
-                with urlopen(request, timeout=1.5) as response:
-                    payload = json.loads(response.read().decode("utf-8"))
-                challenge_type = str(payload.get("challenge_type") or "").lower()
-                if "image" in challenge_type:
-                    return "image"
-                if challenge_type:
-                    return "text"
-            except (json.JSONDecodeError, URLError, TimeoutError):
-                pass
+            payload = _get_json(request, timeout=COMPETITION_LOOKUP_TIMEOUT_S)
+            challenge_type = str((payload or {}).get("challenge_type") or "").lower()
+            if "image" in challenge_type:
+                return "image"
+            if challenge_type:
+                return "text"
 
         tool_set = set(tools)
         has_text = "arena.get_challenge" in tool_set

@@ -33,6 +33,7 @@ if str(REPO_ROOT) not in sys.path:
 
 load_dotenv(REPO_ROOT / ".env")
 
+from arena_clients.config import agent_id_problem
 from arena_clients import (
     build_image_tool_arguments,
     HttpArenaClient,
@@ -241,6 +242,7 @@ def _derive_answer_from_evidence(
     challenge_description: str,
     challenge_rules: str,
     evidence_lines: list[str],
+    max_tokens: int = 8192,
 ) -> str:
     if not evidence_lines:
         return ""
@@ -268,7 +270,7 @@ def _derive_answer_from_evidence(
                     ),
                 },
             ],
-            max_tokens=256,
+            max_tokens=max_tokens,
             temperature=0.0,
         )
     except Exception:
@@ -625,6 +627,7 @@ async def solve_challenge(
             challenge_description=str(ctx.description or ""),
             challenge_rules=str(ctx.rules or ""),
             evidence_lines=list(evidence_lines or []),
+            max_tokens=max_tokens,
         )
         if _is_invalid_answer_candidate(answer):
             answer = ""
@@ -685,6 +688,10 @@ async def main():
         or "Team Nova"
     ).strip()
     os.environ["AGENT_ID"] = agent_id
+    # Practice is shared: a default id lets another team's run replace yours.
+    id_problem = agent_id_problem(os.environ["AGENT_ID"])
+    if id_problem:
+        raise SystemExit(f"❌ {id_problem}")
     os.environ["AGENT_NAME"] = agent_name
     print(f"🤖 {agent_name} starting...")
     print(f"   Agent ID: {agent_id}")

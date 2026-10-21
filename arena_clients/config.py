@@ -213,3 +213,35 @@ def ensure_connected(timeout_s: float = 3.0) -> None:
             "ARENA_API_KEY is missing or invalid. Set it in your .env file "
             "before running the agent."
         )
+
+
+# Ids the kit falls back to when a team has not chosen one.
+KIT_DEFAULT_AGENT_IDS = frozenset(
+    {"", "my-agent", "simple-agent", "langgraph-agent", "crewai-agent", "team-reference-agent"}
+)
+
+
+def agent_id_problem(agent_id: str) -> str:
+    """Why ``agent_id`` must not be used against this server, or "" if it is fine.
+
+    A shared server (Practice) cannot tell teams apart when they use the same
+    id: a second run with that id replaces the first one mid-run and its
+    leaderboard row. Local servers and organizer-launched runs (which set
+    ARENA_USAGE_SCOPE and AGENT_ID themselves) are never blocked.
+    """
+    if _read_env("ARENA_USAGE_SCOPE"):
+        return ""
+    try:
+        host = urlparse(get_api_base()).hostname or ""
+    except ValueError:
+        return ""
+    if _is_loopback_host(host):
+        return ""
+    if str(agent_id or "").strip().lower() not in KIT_DEFAULT_AGENT_IDS:
+        return ""
+    shown = str(agent_id or "").strip() or "(empty)"
+    return (
+        f"AGENT_ID is {shown!r}, a starter-kit default. Set AGENT_ID in .env to a "
+        "unique name for your team (e.g. AGENT_ID=team-nemo). Practice is shared: "
+        "with a default id, another team's run will overwrite yours."
+    )

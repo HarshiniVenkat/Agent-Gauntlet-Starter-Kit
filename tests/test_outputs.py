@@ -88,6 +88,15 @@ class SubmissionSummaryTests(unittest.TestCase):
             ["Accepted: True", "Status: submitted", "Score: 99.35"],
         )
 
+    def test_judge_error_is_explained(self) -> None:
+        lines = submission_summary_lines(
+            {
+                "accepted": True,
+                "score": {"final_score": 25.0, "judge_error": "Judge call failed: timeout", "pending_evaluation": True},
+            }
+        )
+        self.assertIn("Judge error: Judge call failed: timeout (quality 0 until the image can be judged)", lines)
+
     def test_missing_required_tools_get_their_own_line(self) -> None:
         result = {
             "accepted": False,

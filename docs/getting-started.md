@@ -92,7 +92,9 @@ operator-disconnect, and submission-retry details.
 - **Connection refused:** verify `ARENA_SERVER` and run the connectivity preflight.
 - **Unauthorized:** confirm the organizer-provided `ARENA_API_KEY`; do not substitute a provider key.
 - **Missing dependencies:** install the `requirements.txt` inside the selected example directory.
-- **Agent identity collision:** assign a unique `agent_id` in `my_strategy.py`.
+- **`AGENT_ID is 'my-agent', a starter-kit default`:** set `AGENT_ID` in `.env`
+  (or `agent_id` in `my_strategy.py`) to a unique name for your team. Practice is
+  shared, so a default id would collide with other teams' runs.
 
 For HTTP status codes (409 on register, 403 on `get_challenge`, 409 on submit)
 and the rest of the failure modes, see the troubleshooting table in
