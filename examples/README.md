@@ -31,7 +31,7 @@ For setup and first-run instructions, follow the canonical [Quick Start (5 minut
 
 All examples import [`../my_strategy.py`](../my_strategy.py). Start there:
 
-- set `agent_id` and `agent_name`
+- set `agent_name` (your team's `AGENT_ID` goes in `.env`)
 - refine prompt and tool strategy hooks
 - tune temperature, max tokens, and model preferences
 

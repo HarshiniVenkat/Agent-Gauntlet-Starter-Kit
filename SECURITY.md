@@ -22,6 +22,7 @@ whether the issue affects REST, MCP, the proxy, or a framework example.
 - Send the battle key in `X-Arena-API-Key` for REST and MCP, never in a URL.
 - Send the battle key as `Authorization: Bearer` only to the organizer's proxy.
 - Never provide upstream provider keys to the Starter Kit or commit `.env`.
-- Install from the hash-locked requirement entrypoints. Change `.in` sources and
-  regenerate locks when updating dependencies.
+- Install from the hash-locked requirement entrypoints. To add a dependency,
+  add it to `requirements.in` and regenerate the lock (see
+  [Submitting your agent](docs/submitting.md)).
 - Treat logs and saved artifacts as sensitive event data.

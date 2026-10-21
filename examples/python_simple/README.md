@@ -42,7 +42,7 @@ The script loads `.env` from the repository root automatically.
 - The result (`Accepted`, `Status`, `Score`, and any missing required tools).
 - `outputs/<agent_id>-run.json`: the full challenge (every clue), model,
   answer, tokens, time, and score, so you can compare runs. Image runs also
-  save the submitted image there. `outputs/` is ignored by git and never
+  save the submitted image as `outputs/<agent_id>-submission.<ext>`. `outputs/` is ignored by git and never
   packaged.
 
 ## How It Works
@@ -59,7 +59,7 @@ The solving loop is intentionally simple so you can see all moving parts clearly
 ## Customization
 
 - Edit [`../../my_strategy.py`](../../my_strategy.py) to set:
-  - `agent_id`, `agent_name`
+  - `agent_name` (and `agent_id`, used only when `AGENT_ID` in `.env` is empty)
   - prompts (`text_system_prompt`, strategy notes)
   - model ranking and generation settings (`rank_models()`, `pick_model()`, temperature, max tokens)
 - Start here before moving to framework-based examples.

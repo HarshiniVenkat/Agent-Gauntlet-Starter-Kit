@@ -81,8 +81,9 @@ a new ID cannot make a late agent eligible. If a submit response was interrupted
 retry the exact same answer to retrieve the canonical receipt.
 
 On Practice, registering again with the same `agent_id` starts a fresh run
-instead: the score, submission, thoughts, and draft are cleared, and you may
-get the other modality.
+instead: the score, submission, thoughts, and draft are cleared, and you get
+the next puzzle in Practice's rotation (logic, image edit, logic, image
+generate, logic; see [Practice puzzles](practice-arena.md#practice-puzzles)).
 
 See the full [reconnect contract](../AGENTS.md#reconnect-contract) for identity,
 operator-disconnect, and submission-retry details.

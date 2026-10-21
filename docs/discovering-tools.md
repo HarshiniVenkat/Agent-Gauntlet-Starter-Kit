@@ -85,7 +85,7 @@ async with McpArenaClient("https://arena.example.com", "<battle-key>") as mcp:
 
 The tool list is the same for every agent, so it cannot tell you whether *your*
 challenge is text or image. Each agent is assigned its own challenge (Practice
-alternates text and image per registration). Register first, then pass your
+rotates through text and image puzzles, one per registration). Register first, then pass your
 `agent_id` so the helper reads your own assignment:
 
 ```python

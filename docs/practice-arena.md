@@ -82,9 +82,11 @@ after you submit: your packaged agent runs in a sandbox against a separate
 certification server. You do not need to run it, and it cannot pass on public
 Practice, which never opens a lobby.
 
-For a direct gateway check:
+For a direct gateway check, load `.env` into your shell first (from the
+repository root) so the variables are set:
 
 ```bash
+set -a; . ./.env; set +a
 curl -s "$ARENA_SERVER/api/health"
 curl -s "$ARENA_SERVER/proxy/models" \
   -H "Authorization: Bearer $ARENA_API_KEY"
@@ -135,13 +137,47 @@ Use the returned score and telemetry to tune prompts, model ranking, tool order,
 and timeout behavior in `my_strategy.py`. Discover tools and models at runtime;
 the available roster can differ between Practice and a live event.
 
+### Practice puzzles
+
+Practice has five synthetic puzzles. Each registration gets the next one in
+this rotation, then it starts over:
+
+| # | Puzzle | Type | Time limit |
+|---|---|---|---|
+| 1 | `practice_logic_easy_001` | Text: logic | 60 s |
+| 2 | `practice_image_edit_easy_001` | Image: edit a given image | 120 s |
+| 3 | `practice_logic_hard_001` | Text: logic | 120 s |
+| 4 | `practice_image_generate_medium_001` | Image: generate from a prompt | 150 s |
+| 5 | `practice_logic_medium_001` | Text: logic | 90 s |
+
+The rotation is shared by every team, so another team's registration also
+moves it: your next run may skip ahead. Run again to reach a different puzzle,
+and let your agent branch on the type it is assigned (`detect_modality`)
+rather than on the order.
+
+### How a Practice submission is scored
+
+The weights are the event's (see [How You Are Scored](../AGENTS.md#how-you-are-scored)).
+Text answers are checked by an LLM judge. Images are scored only by an image
+judge:
+
+- **Edit:** it compares your image with the input image for accuracy,
+  quality, preservation of the original, and compliance with the notes.
+- **Generate:** it scores how well your image matches the prompt, its quality,
+  and the prompt's constraints (for example "no text").
+
+If the judge cannot score your image, quality is 0 and the score carries
+`judge_error` and `pending_evaluation: true`; that is not a verdict on your
+image, so run again. If a challenge lists `required_tools` and your agent skips
+one, the answer is not accepted, quality is 0, and the response names the
+tools in `missing_required_tools`.
+
 ### Use a unique AGENT_ID
 
 Every team uses the same Practice key, so Practice tells teams apart only by
 `agent_id`. If two runs use the same id, the later registration replaces the
-earlier run, including its leaderboard row. Set `AGENT_ID` in `.env` to a name
-only your team uses; the examples refuse to start on Practice with the kit's
-default id.
+earlier run and its result. Set `AGENT_ID` in `.env` to a name only your team
+uses; the examples refuse to start on Practice with the kit's default id.
 
 ### Final submission retries
 
@@ -193,16 +229,22 @@ When a Practice run is the agent you intend to submit, freeze the code and
 package it from the starter-kit root:
 
 ```bash
-python -m arena_clients.package --agent-id my-team --agent-name "My Team"
+set -a; . ./.env; set +a
+python -m arena_clients.package --agent-id "$AGENT_ID" --agent-name "Your Team Name"
 python -m arena_clients.package --check dist/gauntlet-submission
 ```
+
+Use the same `AGENT_ID` as in `.env`. To rebuild after a change, add `--force`.
 
 See [Submitting your agent](submitting.md) for the package self-check and
 how to hand off the two packager files on GitHub.
 
 ## Known Limits
 
-- There is no organizer UI, spectator UI, or web leaderboard in Practice.
+- There is no leaderboard and no organizer or spectator UI in Practice. Your
+  score is in the submit response, your session, and `outputs/<AGENT_ID>-run.json`.
+- A session expires after 60 minutes without activity; register again to start
+  a new run.
 - Practice state is in memory and resets when the services restart.
 - Practice puzzles are synthetic and do not reveal event challenges.
 - The upstream model roster and rate limits may differ from the live Platform.

@@ -13,7 +13,7 @@ Core integrations are:
 The published starter kit is intentionally centered on `my_strategy.py`, `arena_clients/`, and `examples/`. Keep team-specific wrappers and secrets outside the public package.
 
 ## Project Structure
-- `arena_clients/`: shared config plus REST/MCP client adapters. `config.py` resolves service URLs and runs `ensure_connected()`, `doctor.py` runs the readiness CLI (`python -m arena_clients.doctor`) and the play-rehearsal certify contract (`python -m arena_clients.doctor --certify --json`, which requires `AGENT_ID`), `package.py` assembles and self-checks the upload archive (`python -m arena_clients.package --agent-id my-team --agent-name "My Team"`), `http_client.py` wraps registration/status/thought/draft/submit/usage-scope flows, and `mcp_client.py` wraps SSE tool discovery/calls.
+- `arena_clients/`: shared config plus REST/MCP client adapters. `config.py` resolves service URLs and runs `ensure_connected()`, `doctor.py` runs the readiness CLI (`python -m arena_clients.doctor`) and the play-rehearsal certify contract (`python -m arena_clients.doctor --certify --json`, which requires `AGENT_ID`), `package.py` assembles and self-checks the upload archive (`python -m arena_clients.package --agent-id "$AGENT_ID" --agent-name "Your Team Name"`), `http_client.py` wraps registration/status/thought/draft/submit/usage-scope flows, and `mcp_client.py` wraps SSE tool discovery/calls.
 - `base_strategy.py`: `ChallengeContext` plus the full strategy hook surface shared by all example frameworks.
 - `my_strategy.py`: primary customization point for team identity, prompts, model preferences, and tool policy.
 - `model_selector.py`: available-model lookup and explicit model validation helpers.
@@ -27,7 +27,7 @@ are built and run on 3.12.
 - Copy env template: `cp .env.example .env`
 - Connectivity preflight: `python -m arena_clients.doctor`
 - Certify / play rehearsal: `python -m arena_clients.doctor --certify --json` (with `AGENT_ID` set) is run by the organizers on your submitted agent against a separate certification server; you do not need to run it, and it cannot pass on public Practice, which never opens a lobby
-- Package and self-check: `python -m arena_clients.package --agent-id my-team --agent-name "My Team"` then `python -m arena_clients.package --check dist/gauntlet-submission`
+- Package and self-check (with `.env` loaded: `set -a; . ./.env; set +a`): `python -m arena_clients.package --agent-id "$AGENT_ID" --agent-name "Your Team Name"` (add `--force` to rebuild) then `python -m arena_clients.package --check dist/gauntlet-submission`
 - Minimal smoke run: `cd examples/python_simple && pip install -r requirements.txt && python agent.py`
 - LangGraph example: `cd examples/langgraph && pip install -r requirements.txt && python agent.py`
 - CrewAI example: `cd examples/crewai && pip install -r requirements.txt && python agent.py`
@@ -47,15 +47,16 @@ Practice differences worth knowing:
 See [`docs/practice-arena.md`](docs/practice-arena.md) for the full walkthrough. When the agent is frozen, follow [`docs/submitting.md`](docs/submitting.md) to package and hand off the tarball and checksum on GitHub.
 
 ## Required Configuration
-The organizer must provide:
-- `ARENA_SERVER`
-- `ARENA_API_KEY`
+Set all three in the repo-root `.env`:
+- `ARENA_SERVER`: provided by the organizer
+- `ARENA_API_KEY`: provided by the organizer
+- `AGENT_ID`: chosen by you, unique to your team (lowercase letters, digits, hyphens, e.g. `team-nemo`). Every team on Practice shares one key, so Practice tells teams apart only by `AGENT_ID`; the examples refuse to run there with the kit's default ids. It overrides `agent_id` in `my_strategy.py`, and it is the id you package with.
 
 The starter kit derives the REST API, MCP, and proxy URLs from `ARENA_SERVER`.
 
 Optional overrides and runtime knobs:
 - `ARENA_API_BASE`, `ARENA_MCP_URL`, `LLM_PROXY_HOST`: override the derived REST/MCP/proxy URLs.
-- `AGENT_ID`, `AGENT_NAME`: your team's identity, used by the example agents and proxy telemetry helpers. Set a unique `AGENT_ID`: on a shared server such as Practice the examples refuse the kit's default ids, since another team's run with the same id would replace yours.
+- `AGENT_NAME`: your team's display name.
 - `ARENA_USAGE_SCOPE`: manual proxy token-attribution scope when you are not launched by Agent Gauntlet and need to set `X-Round-ID` yourself.
 
 ## Agent Development Conventions
@@ -73,11 +74,19 @@ Submissions are scored on five axes. Default weights:
 
 | Axis | Default weight | What moves it |
 |---|---|---|
-| Quality | 0.70 | LLM-as-judge assessment of your answer against the puzzle's expected result and required format |
+| Quality | 0.70 | Text: an LLM judge checks your answer against the puzzle's expected result and required format. Image: an image judge scores your image against the prompt (see below) |
 | Speed | 0.15 | Elapsed time from battle start to your submission |
 | Tool coverage | 0.10 | Breadth of the challenge tools your agent actually used (unique tool names, capped at 3) |
 | Model diversity | 0.00 | Unique models do not rank; `models_score` is 100 for everyone |
 | Token efficiency | 0.05 | Total proxy tokens consumed; lower usage scores higher, normalized against the per-challenge token budget |
+
+Image quality comes only from the image judge. For an edit, it compares your
+image with the input image (accuracy, quality, preservation of the original,
+compliance); for a generated image, it scores how well the image matches the
+prompt, its quality, and the prompt's constraints (for example "no text"). If
+the judge cannot score your image, quality is 0 and the score payload carries
+`judge_error` and `pending_evaluation: true`. That is a judge failure, not a
+verdict on your image; the example agents print the error.
 
 Quality dominates, so correctness and exact output format come first — tool coverage and token efficiency decide close finishes. A puzzle may override these weights in its own configuration, so treat them as the default rather than a guarantee.
 
@@ -96,10 +105,10 @@ Preserve `X-Agent-ID` and, when available, `X-Round-ID` on every proxy call. Tok
 - Use `McpArenaClient.detect_modality(tools, agent_id=agent_id)` after registering when you need to branch between text and image flows; Practice assigns text or image per agent.
 - Prefer `connect_arena_mcp()` or `async with McpArenaClient()` when building custom agents on top of the shared client layer.
 - Text flows typically call `arena.get_challenge`, `arena.clues.list`, `arena.clues.get`, and `arena.time_remaining`.
-- Image flows use `arena.image.get_challenge`, `arena.image.broadcast_thought`, and `arena.image.submit_edit`, plus `image_edit` or `image_generate` to produce the image.
+- Image flows use `arena.image.get_challenge`, `arena.image.broadcast_thought`, and `arena.image.submit_edit`, plus `image_edit` or `image_generate` to produce the image (`image_analyze` describes an image).
 - On Practice the challenge payload lists `required_tools`. Skipping any of them sets quality to 0 and `accepted` to false, and the submit response names them in `missing_required_tools`.
 - `HttpArenaClient` exposes `update_status()`, `save_draft()`, `submit()`, and `fetch_usage_scope()` for REST-side coordination.
-- Expect puzzle-dependent tool sets (text/image/web-search and future modalities).
+- Expect puzzle-dependent tool sets (text and image today; more modalities later).
 - Handle tool-call failures gracefully and continue with a safe fallback plan.
 - Track remaining time and submit before deadline; late answers are effectively losses.
 - Preserve proxy telemetry attribution when you customize model calls by sending `X-Agent-ID` and, when available, `X-Round-ID`.
@@ -110,14 +119,14 @@ Registration creates the round session; an HTTP request or MCP SSE connection
 is only a transport and may be recreated without creating a new agent identity.
 
 - Before GO, repeating registration with the same `agent_id`, `agent_name`, and battle key in the same lobby is idempotent and preserves session state. A different name or key is rejected.
-- **On Practice**, registering again with the same `agent_id` starts a fresh run: your score, submission, thoughts, and draft are cleared, and you may be assigned the other modality. Register once per run.
+- **On Practice**, registering again with the same `agent_id` starts a fresh run: your score, submission, thoughts, and draft are cleared, and you get the next puzzle in Practice's rotation (see [Practice](docs/practice-arena.md#practice-puzzles)). Register once per run.
 - After GO, do **not** register again. Keep the same identity and key, recreate the REST client or MCP context, rediscover tools, and continue against the existing session. `registration_too_late` is terminal for registration in that round, including after a full process restart whose startup path always registers.
 - A new `agent_id` after GO is not eligible. An organizer's explicit disconnect removes the session and eligibility; it is different from an ordinary network or SSE disconnect.
 - If a submit response was lost, retry the exact same answer. The server returns the original canonical receipt; a different answer receives `409` and cannot replace the first submission.
 
 ## Validation Checklist
 Before competition or merge:
-- Connectivity / readiness preflight:
+- Connectivity / readiness preflight (load `.env` first so the `curl` lines have their variables: `set -a; . ./.env; set +a`):
   - `python -m arena_clients.doctor`
   - `curl -s "$ARENA_SERVER/api/keys/validate" -H "X-Arena-API-Key: $ARENA_API_KEY"`
   - `curl -s "$ARENA_SERVER/api/health"`
@@ -129,15 +138,13 @@ Before competition or merge:
   - run `cd examples/python_simple && pip install -r requirements.txt && python agent.py`
   - verify registration, wait-for-start behavior, modality detection, MCP tool discovery, and successful submit
 - Post-run verification:
-  - set `AGENT_ID` to your runtime agent ID (from `my_strategy.py` or the `AGENT_ID` env override)
-  - `curl -s "$ARENA_SERVER/api/session/$AGENT_ID" -H "X-Arena-API-Key: $ARENA_API_KEY"`
-  - On Practice, you may also `curl -s "$ARENA_SERVER/api/leaderboard" -H "X-Arena-API-Key: $ARENA_API_KEY"`. That path is denied inside a scored sandbox heat; the live event leaderboard stays public for spectators in a browser, not for the agent.
-    On the Practice server `/api/session/$AGENT_ID` returns only the calling battle key's row.
+  - with `.env` loaded, `curl -s "$ARENA_SERVER/api/session/$AGENT_ID" -H "X-Arena-API-Key: $ARENA_API_KEY"` returns your session: status `submitted`, answer, and score payload
+  - Practice has no leaderboard; your score is in that session, the agent's output, and `outputs/<AGENT_ID>-run.json`. At the live event the leaderboard is for spectators in a browser, and scored sandbox heats deny `GET /api/leaderboard` from the agent.
 - Image smoke test:
   - run one of the full examples against an image challenge
   - verify `arena.image.get_challenge` and `arena.image.submit_edit` both succeed
 - Submission package:
-  - `python -m arena_clients.package --agent-id my-team --agent-name "My Team"`
+  - with `.env` loaded, `python -m arena_clients.package --agent-id "$AGENT_ID" --agent-name "Your Team Name"` (the same `AGENT_ID` as in `.env`; add `--force` to rebuild)
   - `python -m arena_clients.package --check dist/gauntlet-submission`
   - confirm `dist/gauntlet-submission/submission.json` is present and the tree has no `.env`, keys, caches, extra README/LICENSE/`.gitignore`, symlinks, or a participant Dockerfile
   - confirm `dist/<agent-id>-submission.tar.gz` and `dist/<agent-id>-submission.tar.gz.sha256` exist
@@ -156,8 +163,10 @@ Before competition or merge:
 | `SystemExit` from `ensure_connected()` at startup | `ARENA_SERVER` or `ARENA_API_KEY` is unset in the repo-root `.env`. | Copy `.env.example` to `.env` at the repository root and fill in both organizer-provided values. |
 | Model rejected by the proxy | The alias is not on the event roster. | `GET /proxy/models` with your bearer key and pick a returned alias. Discover the roster at runtime; it differs between Practice and event day. |
 | No challenge tools discovered | MCP connected but the modality tools are not what you expected. | Call `list_tools()` every run and use `McpArenaClient.detect_modality(tools, agent_id=agent_id)` instead of hardcoding text or image flows. |
-| `This agent is assigned an image challenge` (or text) | The agent asked for the wrong modality. Practice alternates text and image per registration. | Register first, then call `detect_modality(tools, agent_id=agent_id)`, which reads your own session's assignment. |
+| `This agent is assigned an image challenge` (or text) | The agent asked for the wrong modality. Each Practice registration gets the next puzzle in a rotation of text and image puzzles. | Register first, then call `detect_modality(tools, agent_id=agent_id)`, which reads your own session's assignment. |
 | `Accepted: False` on a submitted, scored answer | The judge marked the answer wrong, or (on Practice) a required tool was not called. The submission still counted. | Check `missing_required_tools` in the response; on Practice the challenge's `required_tools` lists what to call. Otherwise improve the answer. `Accepted` is a verdict, not a delivery receipt. |
+| `Judge error: ...` and quality 0 on an image | The image judge could not score the image (`judge_error`, `pending_evaluation: true`). | Not a verdict on your image. Run again; if it keeps happening, tell the organizers. |
+| `output directory already exists ... (pass --force)` when packaging | `dist/gauntlet-submission` is left from an earlier build. | Add `--force` to replace it. |
 | `doctor --certify` waits for a lobby and fails | Public Practice is always running and never opens a lobby. | Use `doctor` plus a real example run on Practice. The organizers run `--certify` on your submitted agent; you do not need to. |
 | Text answer is empty and the model used its whole token budget | A reasoning model spent `text_max_tokens` thinking. | Raise `text_max_tokens` or rank a different model first in `my_strategy.py`. Python Simple retries once with the next ranked model. |
 | `not_image_challenge` from `arena.image.get_challenge` | The authoritative running heat is a text challenge, so the image path is terminal for this heat. | Stop retrying the image tool. Rediscover tools and use `arena.get_challenge`; do not reconnect or wait for the image gate to open. |

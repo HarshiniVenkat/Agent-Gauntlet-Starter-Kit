@@ -1,7 +1,7 @@
 # Submitting your agent
 
-The organizer admits a repository that contains only the packager tarball and
-its checksum. This kit assembles the submission tree, writes those two files,
+The organizer admits a repository that holds the packager tarball and its
+checksum. This kit assembles the submission tree, writes those two files,
 and runs the same local checks the organizer runs before it builds an image.
 
 Develop against Practice first. When the agent is frozen, run the
@@ -12,20 +12,24 @@ the organizer that repository URL.
 ```text
 develop  →  python -m arena_clients.doctor
          →  python examples/<your-example>/agent.py          # one full run on Practice
-         →  python -m arena_clients.package --agent-id my-team --agent-name "My Team"
+         →  python -m arena_clients.package --agent-id "$AGENT_ID" --agent-name "Your Team Name"
          →  python -m arena_clients.package --check dist/gauntlet-submission
          →  publish dist/<agent-id>-submission.tar.gz and dist/<agent-id>-submission.tar.gz.sha256
 ```
 
 ## The repository you owe
 
-A **new public GitHub repository** whose default branch contains **only**
-these two files at its root, named exactly as the packager wrote them:
+A **new public GitHub repository** whose default branch has these two files
+at its root, named exactly as the packager wrote them:
 
 ```text
 <agent-id>-submission.tar.gz
 <agent-id>-submission.tar.gz.sha256
 ```
+
+Use exactly one tarball and its checksum. Other files in the repository, such
+as a README GitHub adds, are ignored, but a second tarball makes the
+submission ambiguous and it is rejected.
 
 Example for agent id `team-nemo`:
 
@@ -145,8 +149,21 @@ python3.12 -m pip install --require-hashes -r requirements.lock
 ```
 
 The packager copies `requirements/requirements.lock` to `requirements.lock`
-inside the submission. If you added dependencies, regenerate a hash-locked
-file with Python 3.12 compatibility and pass it as `--lockfile`.
+inside the submission. If you added dependencies, add them to
+`requirements.in` and regenerate the lock with Python 3.12:
+
+```bash
+python -m pip install uv
+uv pip compile requirements.in --python-version 3.12 --generate-hashes \
+  --output-file requirements/requirements.lock
+```
+
+For a CrewAI agent, regenerate the full lock the same way from
+`requirements-all.in` into `requirements/requirements-all.lock` (it includes
+`requirements.in`).
+
+Then install from it once (`pip install -r requirements.txt`) and run your
+agent before packaging, to check that the lock is complete.
 
 The agent must not install packages while it runs.
 
@@ -164,57 +181,24 @@ Leave these out of the **archive** (inside `gauntlet-submission/`):
 - A participant Dockerfile — the organizer builds the image from its own recipe
 
 Those README, LICENSE, and `.gitignore` rules apply to files **inside the
-tarball**, not necessarily beside the two files in the submission repository.
-Organizers download only the named tarball and checksum pair.
+tarball**. Organizers download only the named tarball and checksum pair from
+the submission repository.
 
 Never print secret values while packaging.
 
-## Certify / play rehearsal
-
-Plain `python -m arena_clients.doctor` only proves connectivity. A certify
-rehearsal plays a full lobby → GO → submit round. The organizers run it after
-you submit: your packaged agent runs in a sandbox against a separate
-certification server, and this section documents what that check verifies. You
-do not need to run it. Public Practice is always running and never opens a
-lobby, so `--certify` cannot pass there; on Practice, use `doctor` plus one
-full example run.
-
-Set `AGENT_ID` to your team identity first. Certify never invents a
-`doctor-*` identity.
-
-```bash
-python -m arena_clients.doctor --certify --json
-```
-
-This is the frozen certify contract:
-
-- `--certify` waits for lobby, registers, waits for GO, submits, then
-  checks that an exact retry returns the canonical receipt and a
-  different answer returns HTTP 409.
-- The sandbox injects `ARENA_USAGE_SCOPE`. Certify mode never invents a
-  `doctor-<uuid>` scope. If that env var is unset locally, the doctor
-  reads `usage_scope` from `/api/competition`.
-- `--json` writes the checklist object to stdout as pretty JSON. Optional
-  `--output PATH` also writes that same JSON to a file.
-- Exit 0 only if every checklist item is PASS; otherwise exit 1.
-
-Checklist keys, each `PASS` or `FAIL`: `registered_in_lobby`,
-`waited_for_go`, `in_frozen_roster`, `answer_accepted`, `scored`,
-`retry_is_canonical`, `conflicting_answer_rejected`,
-`attribution_scope_exact`.
-
-`--certify` still refuses to run unless the target is Practice or a warmup
-battle. This play rehearsal is not the packaging check in the
-next section.
-
 ## Package and self-check
 
-From the starter-kit root:
+From the starter-kit root, with `.env` loaded so `$AGENT_ID` is set:
 
 ```bash
-python -m arena_clients.package --agent-id my-team --agent-name "My Team"
+set -a; . ./.env; set +a
+python -m arena_clients.package --agent-id "$AGENT_ID" --agent-name "Your Team Name"
 python -m arena_clients.package --check dist/gauntlet-submission
 ```
+
+Package with the same `AGENT_ID` you use in `.env`; it becomes your agent's
+identity at the event. Packaging again stops with `output directory already
+exists`; add `--force` to replace the earlier build.
 
 That command writes `dist/gauntlet-submission/`,
 `dist/<agent-id>-submission.tar.gz`, and
@@ -227,7 +211,7 @@ Useful flags:
 
 | Flag | Purpose |
 |---|---|
-| `--agent-id ID` | Required. Approved agent id (lowercase letters, digits, hyphens). |
+| `--agent-id ID` | Required. Your team's `AGENT_ID` from `.env` (lowercase letters, digits, hyphens). |
 | `--agent-name NAME` | Required. Leaderboard display name. |
 | `--entrypoint PATH` | Python file to launch (default: `examples/python_simple/agent.py`) |
 | `--entrypoint-arg ARG` | Extra argv item after the script; repeatable |
@@ -236,8 +220,9 @@ Useful flags:
 | `--output DIR` | Destination for `gauntlet-submission/` and the tarball (default: `dist/`) |
 | `--force` | Replace an existing `gauntlet-submission/` directory |
 
-The packaged agent reads `ARENA_SERVER` and `ARENA_API_KEY` from the
-process environment. It must work when no `.env` file is present.
+The packaged agent reads `ARENA_SERVER`, `ARENA_API_KEY`, and `AGENT_ID` from
+the process environment, which the organizer's runner sets. It must work when
+no `.env` file is present.
 
 ## Handoff
 
@@ -246,7 +231,7 @@ Create a **new public repository** (not a fork of this kit), for example
 downloads it without logging in, from its default branch, so a private
 repository cannot be fetched and the submission is rejected.
 
-Push **only** `dist/<agent-id>-submission.tar.gz` and
+Push `dist/<agent-id>-submission.tar.gz` and
 `dist/<agent-id>-submission.tar.gz.sha256` to the repository root. Keep
 the filenames exactly as the packager wrote them. Send the organizer that
 repository URL.

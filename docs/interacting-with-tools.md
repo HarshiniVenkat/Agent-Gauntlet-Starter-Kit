@@ -50,7 +50,7 @@ Tool responses are returned as dictionaries. Common patterns:
 ```python
 # Challenge response
 challenge = await mcp.get_challenge("my-agent")
-print(challenge.challenge_type)   # "logic-puzzle", "web-search", etc.
+print(challenge.challenge_type)   # e.g. "logic-puzzle"
 print(challenge.description)       # What to solve
 print(challenge.rules)             # Constraints and output format
 print(challenge.max_time_s)        # Time limit in seconds

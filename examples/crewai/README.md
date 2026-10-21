@@ -52,10 +52,11 @@ Text and image modes are intentionally different:
 
 ## Packaging
 
-CrewAI needs a helper module and the full dependency lock in its submission:
+CrewAI needs a helper module and the full dependency lock in its submission.
+From the repository root, with `.env` loaded (`set -a; . ./.env; set +a`):
 
 ```bash
-python -m arena_clients.package --agent-id my-team --agent-name "My Team" \
+python -m arena_clients.package --agent-id "$AGENT_ID" --agent-name "Your Team Name" \
   --entrypoint examples/crewai/agent.py \
   --include examples/crewai/arena_tools.py \
   --lockfile requirements/requirements-all.lock

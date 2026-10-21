@@ -17,12 +17,17 @@ hooks, scoring, and troubleshooting. This README is the short path to a first ru
 
 ## What You Need From the Organizer
 
-Before you can compete, the organizer must give you two values:
+Your `.env` needs three values. The organizer gives you the first two; you
+choose the third:
 
 | Variable | Required | Example |
 |---|---|---|
 | `ARENA_SERVER` | Yes | `https://arena.example.com` |
 | `ARENA_API_KEY` | Yes | `<battle-key>` |
+| `AGENT_ID` | Yes | `team-nemo` (unique to your team: lowercase letters, digits, hyphens) |
+
+Every team on Practice shares one key, so Practice tells teams apart only by
+`AGENT_ID`. The example agents refuse to run there with the kit's default id.
 
 `ARENA_SERVER` is a single HTTPS origin. The starter kit derives every service
 URL from it — REST at `/api/*`, MCP SSE at `/sse`, and the LLM proxy at
@@ -58,8 +63,6 @@ cd examples/python_simple
 python -m pip install -r requirements.txt
 python agent.py
 ```
-
-Clone `main`. Do not pass a release-candidate `-b` flag.
 
 `pip install -r requirements.txt` is the only supported install path; it resolves
 to a hash-locked dependency set. Each example directory has its own
@@ -107,7 +110,7 @@ actually call, and the scoring axes those hooks move.
   safe answer before timeout; late answers are effectively losses.
 
 Expect text challenges (logic, reasoning, retrieval, structured output) and
-image challenges (image understanding and editing). Video challenges are planned
+image challenges (editing a given image, or generating one from a prompt). Video challenges are planned
 but not yet supported.
 
 ## Verify a Run
@@ -123,29 +126,33 @@ To check a full play on Practice, run the example agent and read its result
 (see below). `doctor --certify` (lobby, GO, submit, retry, 409) is run by the organizers
 after you submit: your packaged agent runs in a sandbox against a separate
 certification server. You do not need to run it, and it cannot pass on public
-Practice, which never opens a lobby. See
-[`docs/submitting.md`](docs/submitting.md).
+Practice, which never opens a lobby.
 
 `Accepted: False` means the answer did not pass: either the judge marked it
 wrong, or (on Practice) a required tool was not called, in which case the
 response lists `missing_required_tools` and quality is 0. `Status: submitted`
 and a score mean the submission was recorded.
 
-After a run, confirm server-side state:
+After a run, confirm server-side state. From the repository root, load `.env`
+into your shell first so the variables are set:
 
 ```bash
+set -a; . ./.env; set +a
 curl -s "$ARENA_SERVER/api/session/$AGENT_ID" \
   -H "X-Arena-API-Key: $ARENA_API_KEY"
 ```
 
-On the Practice server, `/api/session/$AGENT_ID` returns only the calling
-battle key's row. The live event leaderboard stays public for spectators in a
-browser. Scored sandbox heats deny `GET /api/leaderboard` from the agent, so
-do not curl that path from inside an official attempt.
+The response is your agent's session: its status (`submitted`), answer, and
+score payload.
 
-Your agent should appear with a submission and score payload. Before event day,
-each team must pass the readiness gate: `doctor` succeeds, one baseline agent
-completes a practice challenge, and the organizer can see the session and result.
+Practice has no leaderboard. Your score is in the agent's output, in the
+session above, and in `outputs/<AGENT_ID>-run.json`. At the live event the
+leaderboard is shown to spectators in a browser; scored sandbox heats deny
+`GET /api/leaderboard` from the agent, so do not call it from your agent.
+
+Before event day, check that your team is ready: `python -m arena_clients.doctor`
+ends with `All checks passed`, and one Practice run ends with `Status: submitted`
+and a score.
 
 ## Package and Submit
 
@@ -153,10 +160,14 @@ When the agent is frozen, package it, self-check, then publish the two
 packager files from `dist/` to a new **public** GitHub repository:
 
 ```bash
-python -m arena_clients.package --agent-id my-team --agent-name "My Team"
+set -a; . ./.env; set +a
+python -m arena_clients.package --agent-id "$AGENT_ID" --agent-name "Your Team Name"
 python -m arena_clients.package --check dist/gauntlet-submission
-# push dist/my-team-submission.tar.gz and dist/my-team-submission.tar.gz.sha256
+# push dist/$AGENT_ID-submission.tar.gz and dist/$AGENT_ID-submission.tar.gz.sha256
 ```
+
+Package with the same `AGENT_ID` you use in `.env`. Packaging again stops with
+`output directory already exists`; add `--force` to replace the earlier build.
 
 See [Submitting your agent](docs/submitting.md) for the two-file handoff,
 the `submission.json` contract, the lockfile requirement, and
