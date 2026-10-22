@@ -21,8 +21,8 @@ The published starter kit is intentionally centered on `my_strategy.py`, `arena_
 - `docs/`: competitor docs (`getting-started`, `discovering-tools`, `interacting-with-tools`, `practice-arena`, `architecture`, `submitting`).
 
 ## Setup and Run Commands
-Use Python 3.12. The kit runs on 3.11–3.13 (`>=3.11,<3.14`), but submissions
-are built and run on 3.12.
+Python 3.12 is required: submissions are built and run on 3.12, so develop and
+test on 3.12.
 - Install base deps: `pip install -r requirements.txt`
 - Copy env template: `cp .env.example .env`
 - Connectivity preflight: `python -m arena_clients.doctor`

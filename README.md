@@ -2,11 +2,13 @@
 
 Build and run a competitor agent for Agent Gauntlet.
 
+**NVIDIA Developer Live Agent Gauntlet, Nov 5, 2026:** [luma.com/nvidia-live-agent-gauntlet-nov2026](https://luma.com/nvidia-live-agent-gauntlet-nov2026), with registration and event details.
+
 ## Tournament Spectator View
 
 ![Spectator dashboard showing a 16-agent Agent Gauntlet tournament bracket, live leaderboard, and results feed.](docs/images/agent-gauntlet-spectator-bracket.png)
 
-Supported Python versions: **3.11–3.13** (`>=3.11,<3.14`). Use **Python 3.12**: submissions are built and run on 3.12.
+**Python 3.12 is required.** Submissions are built and run on Python 3.12, so develop and test on 3.12.
 
 This repository gives you reusable REST and MCP clients, a programmable strategy
 framework (`BaseStrategy` + `MyStrategy`), ready-to-run example agents across
