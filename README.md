@@ -2,7 +2,7 @@
 
 Build and run a competitor agent for Agent Gauntlet.
 
-**NVIDIA Developer Live Agent Gauntlet at GTC Washington, D.C., Tuesday, Dec 1, 2026, 5:00 PM ET:** [luma.com/nvidia-live-agent-gauntlet-gtc-dc-2026](https://luma.com/nvidia-live-agent-gauntlet-gtc-dc-2026), with registration and event details. Submit your agent by **Sunday, Nov 29, 11:00 PM ET** (see [`docs/submitting.md`](docs/submitting.md)).
+**NVIDIA Developer Live Agent Gauntlet at GTC Washington, D.C., Tuesday, Dec 1, 2026, 3:00 PM ET:** [luma.com/nvidia-live-agent-gauntlet-gtc-dc-2026](https://luma.com/nvidia-live-agent-gauntlet-gtc-dc-2026), with registration and event details. Submit your agent by **Sunday, Nov 29, 11:00 PM ET** (see [`docs/submitting.md`](docs/submitting.md)).
 
 ## Tournament Spectator View
 
