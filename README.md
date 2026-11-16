@@ -2,7 +2,7 @@
 
 Build and run a competitor agent for Agent Gauntlet.
 
-**NVIDIA Developer Live Agent Gauntlet, Nov 5, 2026:** [luma.com/nvidia-live-agent-gauntlet-nov2026](https://luma.com/nvidia-live-agent-gauntlet-nov2026), with registration and event details.
+**NVIDIA Developer Live Agent Gauntlet at GTC Washington, D.C., Tuesday, Dec 1, 2026, 5:00 PM ET:** [luma.com/nvidia-live-agent-gauntlet-gtc-dc-2026](https://luma.com/nvidia-live-agent-gauntlet-gtc-dc-2026), with registration and event details. Submit your agent by **Sunday, Nov 29, 11:00 PM ET** (see [`docs/submitting.md`](docs/submitting.md)).
 
 ## Tournament Spectator View
 
@@ -103,9 +103,16 @@ actually call, and the scoring axes those hooks move.
 
 - **Originality**: Your agent must not be an exact replica of the starter kit;
   otherwise it may be disqualified. Customize prompts, strategy, and logic.
-- **Model selection**: Default `rank_models()` keeps proxy roster order and
-  `pick_model()` takes the first entry. Override those hooks — model choice is
-  scored.
+- **Model selection**: Default `rank_models()` puts `nemotron-3-super` first
+  for text challenges when the roster has it (set `default_text_model` in
+  `my_strategy.py` to change or disable that) and otherwise keeps proxy roster
+  order; `pick_model()` takes the first entry. Override those hooks — model
+  choice is scored.
+- **Nemotron reasoning**: Nemotron models reason by default. The proxy turns
+  reasoning on for any Nemotron request that does not set it, and raises a
+  `max_tokens` below 8192 to 8192. To turn it off, send
+  `"reasoning": {"enabled": false}` in the request (with the OpenAI client:
+  `extra_body={"reasoning": {"enabled": False}}`).
 - **Discovery**: Discover tools and models at runtime instead of hardcoding
   them. The roster differs between Practice and a live event.
 - **Deadlines**: Challenges are time-boxed. Track remaining time and submit a

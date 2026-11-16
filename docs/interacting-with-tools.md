@@ -176,8 +176,29 @@ response = llm.chat.completions.create(
 
 ### Model Selection
 
-Default `rank_models()` preserves proxy roster order for text and moves
-image-capable models first for image; `pick_model()` takes the first entry. Override those hooks to implement your model policy.
+Default `rank_models()` puts `default_text_model` (`nemotron-3-super`) first
+for text when the roster has it and otherwise preserves proxy roster order, and
+moves image-capable models first for image; `pick_model()` takes the first
+entry. Set `default_text_model` in `my_strategy.py` to another alias, or to
+`None` for plain roster order, or override those hooks to implement your model
+policy.
+
+### Nemotron Reasoning
+
+Nemotron models reason by default. When a request to a Nemotron model carries
+no reasoning setting, the proxy adds `"reasoning": {"enabled": true}` and
+raises a `max_tokens` below 8192 to 8192, so the answer is not cut off.
+Reasoning is slower (several seconds per call) but much more accurate on
+multi-step tasks. Any reasoning setting you send is kept as is. To turn it off:
+
+```python
+response = llm.chat.completions.create(
+    model="nemotron-3-super",
+    messages=messages,
+    max_tokens=1024,
+    extra_body={"reasoning": {"enabled": False}},
+)
+```
 
 Every model name shown in this documentation or in a sample strategy is an
 example preference only. It is not the event roster or a promise that an alias

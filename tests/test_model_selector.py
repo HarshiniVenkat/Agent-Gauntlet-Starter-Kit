@@ -46,6 +46,57 @@ class StrictModelSelectionTests(unittest.TestCase):
         self.assertEqual(strategy.get_llm_params(ctx)["max_tokens"], 8192)
         self.assertEqual(MyStrategy().get_llm_params(ctx)["max_tokens"], 8192)
 
+    def test_text_default_puts_nemotron_super_ahead_of_the_fast_tier(self) -> None:
+        ctx = ChallengeContext(challenge_type="logic-puzzle")
+        roster = [
+            "nemotron-3.5-lightning",
+            "qwen3.7-flash",
+            "nemotron-3-super",
+            "gpt-5.4",
+        ]
+        strategy = BaseStrategy()
+
+        ranked = strategy.rank_models(ctx, roster)
+
+        self.assertEqual(
+            ranked,
+            ["nemotron-3-super", "nemotron-3.5-lightning", "qwen3.7-flash", "gpt-5.4"],
+        )
+        self.assertEqual(strategy.pick_model("solve", ranked, ctx), "nemotron-3-super")
+        self.assertEqual(roster[0], "nemotron-3.5-lightning")  # caller's list untouched
+        self.assertEqual(MyStrategy().rank_models(ctx, roster)[0], "nemotron-3-super")
+
+    def test_text_default_falls_back_to_roster_order_when_absent(self) -> None:
+        ctx = ChallengeContext(challenge_type="logic-puzzle")
+        roster = ["nemotron-3.5-lightning", "qwen3.7-flash", "gpt-5.4"]
+
+        self.assertEqual(BaseStrategy().rank_models(ctx, roster), roster)
+
+    def test_text_default_can_be_turned_off_or_changed(self) -> None:
+        ctx = ChallengeContext(challenge_type="logic-puzzle")
+        roster = ["nemotron-3.5-lightning", "nemotron-3-super", "gpt-5.4"]
+
+        class RosterOrder(BaseStrategy):
+            default_text_model = None
+
+        class PreferGpt(BaseStrategy):
+            default_text_model = "gpt-5.4"
+
+        self.assertEqual(RosterOrder().rank_models(ctx, roster), roster)
+        self.assertEqual(PreferGpt().rank_models(ctx, roster)[0], "gpt-5.4")
+
+    def test_text_default_does_not_affect_image_ranking(self) -> None:
+        ctx = ChallengeContext(
+            challenge_type="image_edit",
+            image_url="data:image/png;base64,c291cmNl",
+        )
+        roster = ["nemotron-3-super", "gemini-3.1-flash-image", "gemini-3-pro-image"]
+
+        with mock.patch.object(model_selector, "_LAST_MODEL_ROWS", []):
+            ranked = BaseStrategy().rank_models(ctx, roster)
+
+        self.assertEqual(ranked, ["gemini-3.1-flash-image", "gemini-3-pro-image"])
+
     def test_rank_models_prefers_image_aliases_for_image_challenge(self) -> None:
         ctx = ChallengeContext(
             challenge_type="image_edit",

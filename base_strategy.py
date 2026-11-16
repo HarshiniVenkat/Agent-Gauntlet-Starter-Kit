@@ -59,6 +59,11 @@ class BaseStrategy:
     # Reasoning models spend most of this budget thinking before they answer;
     # 1024 cut the roster's default model off before it wrote an answer.
     text_max_tokens = 8192
+    # Text model tried first when the live roster offers it. The roster lists
+    # its fastest model first, which answers multi-step tasks in one shallow
+    # shot; Nemotron Super with reasoning (on by default at the proxy) is the
+    # stronger default. Set to None to keep plain roster order.
+    default_text_model: str | None = "nemotron-3-super"
     image_strategy_notes = (
         "Prefer image_edit when an input image is available. Keep rationale concise. "
         "Request standard-resolution output only and avoid HD or 4K images."
@@ -90,7 +95,8 @@ class BaseStrategy:
     ) -> list[str]:
         """Return the ranked model list for the current challenge.
 
-        Text challenges keep proxy roster order. Image challenges prefer
+        Text challenges put ``default_text_model`` first when the roster has
+        it and keep proxy roster order for the rest. Image challenges prefer
         image-capable aliases via ``prefer_image_models``. Override this
         (or `pick_model`) to implement a real model-selection strategy.
         """
@@ -98,7 +104,12 @@ class BaseStrategy:
             preferred = self.prefer_image_models(available_models)
             if preferred:
                 return preferred
-        return list(available_models)
+        ranked = list(available_models)
+        default_model = str(self.default_text_model or "").strip()
+        if default_model and default_model in ranked:
+            ranked.remove(default_model)
+            ranked.insert(0, default_model)
+        return ranked
 
     def pick_model(
         self,
